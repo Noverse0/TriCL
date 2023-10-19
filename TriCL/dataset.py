@@ -5,7 +5,7 @@ import pickle
 import torch
 from torch_scatter import scatter_add
 from torch.utils.data import random_split
-
+import dgl.sparse as dglsp
 
 class BaseDataset(object):
     def __init__(self, type: str, name: str, device: str = 'cpu'):
@@ -64,6 +64,10 @@ class BaseDataset(object):
         weight = torch.ones(self.num_edges)
         Dn = scatter_add(weight[self.hyperedge_index[1]], self.hyperedge_index[0], dim=0, dim_size=self.num_nodes)
         De = scatter_add(torch.ones(self.hyperedge_index.shape[1]), self.hyperedge_index[1], dim=0, dim_size=self.num_edges)
+        
+        self.H = dglsp.spmatrix(
+            self.hyperedge_index
+        ).to_dense()
 
         # print('=============== Dataset Stats ===============')
         # print(f'dataset type: {self.type}, dataset name: {self.name}')
@@ -84,6 +88,7 @@ class BaseDataset(object):
         self.features = self.features.to(device)
         self.hyperedge_index = self.hyperedge_index.to(device)
         self.labels = self.labels.to(device)
+        self.H = self.H.to(device)
         self.device = device
         return self
 

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from TriCL.loader import DatasetLoader
-from TriCL.models import HyperEncoder, TriCL
+from TriCL.models import HGNN, TriCL
 from TriCL.utils import drop_features, drop_incidence, valid_node_edge_mask, hyperedge_index_masking
 from TriCL.evaluation import linear_evaluation
 
@@ -113,7 +113,8 @@ if __name__ == '__main__':
     accs = []
     for seed in range(args.num_seeds):
         fix_seed(seed)
-        encoder = HyperEncoder(data.features.shape[1], params['hid_dim'], params['hid_dim'], params['num_layers'])
+        # encoder = HyperEncoder(data.features.shape[1], params['hid_dim'], params['hid_dim'], params['num_layers'])
+        encoder = HGNN(data.H, data.features.shape[1], params['hid_dim']).to(args.device)
         model = TriCL(encoder, params['proj_dim']).to(args.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
 

@@ -1,47 +1,103 @@
 from typing import Optional, Callable
 
+import dgl.sparse as dglsp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_scatter import scatter_add
+# from torch_scatter import scatter_add
 
-from TriCL.layers import ProposedConv
+# from TriCL.layers import ProposedConv
 
 
-class HyperEncoder(nn.Module):
-    def __init__(self, in_dim, edge_dim, node_dim, num_layers=2, act: Callable = nn.PReLU()):
-        super(HyperEncoder, self).__init__()
-        self.in_dim = in_dim
-        self.edge_dim = edge_dim
-        self.node_dim = node_dim
-        self.num_layers = num_layers
-        self.act = act
+# class HyperEncoder(nn.Module):
+#     def __init__(self, in_dim, edge_dim, node_dim, num_layers=2, act: Callable = nn.PReLU()):
+#         super(HyperEncoder, self).__init__()
+#         self.in_dim = in_dim
+#         self.edge_dim = edge_dim
+#         self.node_dim = node_dim
+#         self.num_layers = num_layers
+#         self.act = act
 
-        self.convs = nn.ModuleList()
-        if num_layers == 1:
-            self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-        else:
-            self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-            for _ in range(self.num_layers - 2):
-                self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-            self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+#         self.convs = nn.ModuleList()
+#         if num_layers == 1:
+#             self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+#         else:
+#             self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+#             for _ in range(self.num_layers - 2):
+#                 self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+#             self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+#         self.reset_parameters()
+
+#     def reset_parameters(self):
+#         for conv in self.convs:
+#             conv.reset_parameters()
+
+#     def forward(self, x: Tensor, hyperedge_index: Tensor, num_nodes: int, num_edges: int):
+#         for i in range(self.num_layers):
+#             x, e = self.convs[i](x, hyperedge_index, num_nodes, num_edges)
+#             x = self.act(x)
+#         return x, e # act, act
+
+class HGNN(nn.Module):
+    def __init__(self, H, in_size, hidden_dims, dropout_rate=0.0):
+        super().__init__()
+
+        self.edge_dim = hidden_dims
+        self.node_dim = hidden_dims
+        self.W1 = nn.Linear(in_size, hidden_dims)
+        self.W2 = nn.Linear(hidden_dims, hidden_dims)
+        self.dropout = nn.Dropout(dropout_rate)
+        
+        self.bias_e = nn.Parameter(torch.Tensor(self.edge_dim))
+        self.bias_n = nn.Parameter(torch.Tensor(self.node_dim))
+        
+        self.prelu_e = nn.PReLU()
+        self.prelu_n = nn.PReLU()
+        
         self.reset_parameters()
 
+        ###########################################################
+        # (HIGHLIGHT) Compute the Laplacian with Sparse Matrix API
+        ###########################################################
+        # Compute node degree.
+        d_V = H.sum(1)
+        # Compute edge degree.
+        d_E = H.sum(0)
+        # Compute the inverse of the square root of the diagonal D_v.
+        D_v_invsqrt = dglsp.diag(d_V**-0.5).to_dense().to(0)
+        # Compute the inverse of the diagonal D_e.
+        D_e_inv = dglsp.diag(d_E**-1).to_dense().to(0)
+        # In our example, B is an identity matrix.
+        n_edges = d_E.shape[0]
+        B = dglsp.identity((n_edges, n_edges)).to_dense().to(0)
+        # Compute Laplacian from the equation above.
+        self.E = D_e_inv @ H.T @ D_v_invsqrt
+        self.L = D_v_invsqrt @ H @ B
+        
     def reset_parameters(self):
-        for conv in self.convs:
-            conv.reset_parameters()
+        self.W1.reset_parameters()
+        self.W2.reset_parameters()
+        nn.init.zeros_(self.bias_e)
+        nn.init.zeros_(self.bias_n)
 
-    def forward(self, x: Tensor, hyperedge_index: Tensor, num_nodes: int, num_edges: int):
-        for i in range(self.num_layers):
-            x, e = self.convs[i](x, hyperedge_index, num_nodes, num_edges)
-            x = self.act(x)
-        return x, e # act, act
-
+    def forward(self, X, dropout_ratio: Optional[float] = 1.0):
+        if dropout_ratio == 1.0:
+            e = self.E @ self.W1(self.dropout(X)) + self.bias_e
+            e = self.prelu_e(e)
+            n = self.L @ self.W2(self.dropout(e)) + self.bias_n
+            n = self.prelu_n(n)
+        else:
+            dropout = nn.Dropout(dropout_ratio)
+            e = self.E @ self.W1(dropout(X)) + self.bias_e
+            e = self.prelu_e(e)
+            n = self.L @ self.W2(dropout(e)) + self.bias_n
+            n = self.prelu_n(n)
+        return n, e
 
 
 class TriCL(nn.Module):
-    def __init__(self, encoder: HyperEncoder, proj_dim: int):
+    def __init__(self, encoder: HGNN, proj_dim: int):
         super(TriCL, self).__init__()
         self.encoder = encoder
 
@@ -66,17 +122,22 @@ class TriCL(nn.Module):
         
     def forward(self, x: Tensor, hyperedge_index: Tensor,
                 num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
-        if num_nodes is None:
-            num_nodes = int(hyperedge_index[0].max()) + 1
-        if num_edges is None:
-            num_edges = int(hyperedge_index[1].max()) + 1
+        n1, e1 = self.encoder(x)
+        return n1, e1
+        
+    # def forward(self, x: Tensor, hyperedge_index: Tensor,
+    #             num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
+    #     if num_nodes is None:
+    #         num_nodes = int(hyperedge_index[0].max()) + 1
+    #     if num_edges is None:
+    #         num_edges = int(hyperedge_index[1].max()) + 1
 
-        node_idx = torch.arange(0, num_nodes, device=x.device)
-        edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=x.device)
-        self_loop = torch.stack([node_idx, edge_idx])
-        self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
-        n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + num_nodes)
-        return n, e[:num_edges]
+    #     node_idx = torch.arange(0, num_nodes, device=x.device)
+    #     edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=x.device)
+    #     self_loop = torch.stack([node_idx, edge_idx])
+    #     self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
+    #     n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + num_nodes)
+    #     return n, e[:num_edges]
 
     def without_selfloop(self, x: Tensor, hyperedge_index: Tensor, node_mask: Optional[Tensor] = None,
                 num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
