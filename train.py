@@ -8,7 +8,7 @@ import torch
 
 from TriCL.loader import DatasetLoader
 from TriCL.models import HGNN, TriCL
-from TriCL.utils import drop_features, drop_incidence, valid_node_edge_mask, hyperedge_index_masking
+from TriCL.utils import drop_features, drop_incidence, valid_node_edge_mask, hyperedge_index_masking, overlapping_score_dgl
 from TriCL.evaluation import linear_evaluation
 
 
@@ -74,6 +74,11 @@ def node_classification_eval(num_splits=20):
     model.eval()
     n, _ = model(data.features, data.hyperedge_index)
 
+    k = max(data.labels.tolist())
+    score = overlapping_score_dgl(data.features.detach().to('cpu'), n.detach().to('cpu'), k)
+
+    print(score)
+    
     if data.name == 'pubmed':
         lr = 0.005
         max_epoch = 300

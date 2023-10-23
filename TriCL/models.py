@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 # from torch_scatter import scatter_add
 
-# from TriCL.layers import ProposedConv
+from TriCL.layers import ProposedConv, HGNN_conv
 
 
 # class HyperEncoder(nn.Module):
@@ -40,59 +40,29 @@ from torch import Tensor
 #         return x, e # act, act
 
 class HGNN(nn.Module):
-    def __init__(self, H, in_size, hidden_dims, dropout_rate=0.0):
-        super().__init__()
-
-        self.edge_dim = hidden_dims
-        self.node_dim = hidden_dims
-        self.W1 = nn.Linear(in_size, hidden_dims)
-        self.W2 = nn.Linear(hidden_dims, hidden_dims)
-        self.dropout = nn.Dropout(dropout_rate)
+    def __init__(self, in_dim, node_dim, num_layers=2):
+        super(HGNN, self).__init__()
+        self.in_dim = in_dim
+        self.node_dim = node_dim
+        self.edge_dim = node_dim
+        self.num_layers = num_layers
         
-        self.bias_e = nn.Parameter(torch.Tensor(self.edge_dim))
-        self.bias_n = nn.Parameter(torch.Tensor(self.node_dim))
-        
-        self.prelu_e = nn.PReLU()
-        self.prelu_n = nn.PReLU()
-        
-        self.reset_parameters()
-
-        ###########################################################
-        # (HIGHLIGHT) Compute the Laplacian with Sparse Matrix API
-        ###########################################################
-        # Compute node degree.
-        d_V = H.sum(1)
-        # Compute edge degree.
-        d_E = H.sum(0)
-        # Compute the inverse of the square root of the diagonal D_v.
-        D_v_invsqrt = dglsp.diag(d_V**-0.5).to_dense().to(0)
-        # Compute the inverse of the diagonal D_e.
-        D_e_inv = dglsp.diag(d_E**-1).to_dense().to(0)
-        # In our example, B is an identity matrix.
-        n_edges = d_E.shape[0]
-        B = dglsp.identity((n_edges, n_edges)).to_dense().to(0)
-        # Compute Laplacian from the equation above.
-        self.E = D_e_inv @ H.T @ D_v_invsqrt
-        self.L = D_v_invsqrt @ H @ B
+        self.convs = nn.ModuleList()
+        if num_layers == 1:
+            self.convs.append(HGNN_conv(in_dim, node_dim))
+        else:
+            self.convs.append(HGNN_conv(in_dim, node_dim))
+            for _ in range(self.num_layers - 2):
+                self.convs.append(HGNN_conv(node_dim, node_dim))
+            self.convs.append(HGNN_conv(node_dim, node_dim))
         
     def reset_parameters(self):
-        self.W1.reset_parameters()
-        self.W2.reset_parameters()
-        nn.init.zeros_(self.bias_e)
-        nn.init.zeros_(self.bias_n)
-
-    def forward(self, X, dropout_ratio: Optional[float] = 1.0):
-        if dropout_ratio == 1.0:
-            e = self.E @ self.W1(self.dropout(X)) + self.bias_e
-            e = self.prelu_e(e)
-            n = self.L @ self.W2(self.dropout(e)) + self.bias_n
-            n = self.prelu_n(n)
-        else:
-            dropout = nn.Dropout(dropout_ratio)
-            e = self.E @ self.W1(dropout(X)) + self.bias_e
-            e = self.prelu_e(e)
-            n = self.L @ self.W2(dropout(e)) + self.bias_n
-            n = self.prelu_n(n)
+        for conv in self.convs:
+            conv.reset_parameters()
+    
+    def forward(self, x, Q, P, dropout_rate: float):
+        for i in range(self.num_layers):
+            n, e = self.convs[i](x, Q, P, dropout_rate)
         return n, e
 
 
@@ -122,8 +92,51 @@ class TriCL(nn.Module):
         
     def forward(self, x: Tensor, hyperedge_index: Tensor,
                 num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
-        n1, e1 = self.encoder(x)
-        return n1, e1
+        if self_loop:
+            if num_nodes is None:
+                num_nodes = int(hyperedge_index[0].max()) + 1
+            if num_edges is None:
+                num_edges = int(hyperedge_index[1].max()) + 1
+            node_idx = torch.arange(0, num_nodes, device=self.device)
+            edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=self.device)
+            self_loop = torch.stack([node_idx, edge_idx])
+            self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
+                    
+            self.H = dglsp.spmatrix(
+                self_loop_hyperedge_index
+            ).to_dense()
+            
+            Q, P = self._generate_G_from_H(self.H)
+            n1, e1 = self.encoder(x, Q, P)
+        else:
+            self.H = dglsp.spmatrix(
+                hyperedge_index
+            ).to_dense()
+            
+            Q, P = self._generate_G_from_H(self.H)
+            n1, e1 = self.encoder(x, Q, P)
+            
+        return n1, e1[:num_edges]
+        
+    def _generate_G_from_H(self, H):
+        n_edge = H.shape[1]
+        
+        # the weight of the hyperedge
+        W = torch.ones(n_edge, dtype=torch.float32).to(self.device)
+        # the degree of the node
+        DV = torch.sum(H * W, dim=1)
+        # the degree of the hyperedge
+        DE = torch.sum(H, dim=0)
+
+        invDE = torch.diag(1.0 / DE)
+        DV2 = torch.diag(1.0 / torch.sqrt(DV))
+        W = torch.diag(W)
+        HT = torch.t(H)
+
+        Q = invDE @ HT @ DV2
+        P = DV2 @ H @ W
+        
+        return Q, P
         
     # def forward(self, x: Tensor, hyperedge_index: Tensor,
     #             num_nodes: Optional[int] = None, num_edges: Optional[int] = None):

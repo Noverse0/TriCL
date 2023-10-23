@@ -1,10 +1,10 @@
 default: build
 
 help:
-	@echo 'Management commands for sim_hgcl:'
+	@echo 'Management commands for tricl:'
 	@echo
 	@echo 'Usage:'
-	@echo '    make build            Build the sim_hgcl project.'
+	@echo '    make build            Build the tricl project.'
 	@echo '    make pip-sync         Pip sync.'
 
 preprocess:
@@ -12,18 +12,18 @@ preprocess:
 
 build:
 	@echo "Building Docker image"
-	@docker build . -t sim_hgcl 
+	@docker build . -t tricl 
 
 run:
 	@echo "Booting up Docker Container"
-	@docker run -it --gpus '"device=0"' --ipc=host --name sim_hgcl -v `pwd`:/workspace/sim_hgcl sim_hgcl:latest /bin/bash
+	@docker run -it --gpus '"device=0"' --ipc=host --name tricl -v `pwd`:/workspace/tricl tricl:latest /bin/bash
 
 up: build run
 
 rm: 
-	@docker rm sim_hgcl
+	@docker rm tricl
 
 stop:
-	@docker stop sim_hgcl
+	@docker stop tricl
 
 reset: stop rm
