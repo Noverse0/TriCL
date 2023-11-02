@@ -5,6 +5,8 @@ import yaml
 from tqdm import tqdm
 import numpy as np
 import torch
+import math
+import time
 
 from TriCL.loader import DatasetLoader
 from TriCL.models import HyperEncoder, TriCL
@@ -28,7 +30,7 @@ def train(model_type, num_negs):
 
     model.train()
     optimizer.zero_grad(set_to_none=True)
-
+    
     # Hypergraph Augmentation
     hyperedge_index1 = drop_incidence(hyperedge_index, params['drop_incidence_rate'])
     hyperedge_index2 = drop_incidence(hyperedge_index, params['drop_incidence_rate'])
@@ -43,17 +45,17 @@ def train(model_type, num_negs):
     # Encoder
     n1, e1 = model(x1, hyperedge_index1, num_nodes, num_edges)
     n2, e2 = model(x2, hyperedge_index2, num_nodes, num_edges)
-
+    
     # Projection Head
     n1, n2 = model.node_projection(n1), model.node_projection(n2)
     e1, e2 = model.edge_projection(e1), model.edge_projection(e2)
-
+    
     loss_n = model.node_level_loss(n1, n2, params['tau_n'], batch_size=params['batch_size_1'], num_negs=num_negs)
     if model_type in ['tricl_ng', 'tricl']:
         loss_g = model.group_level_loss(e1[edge_mask], e2[edge_mask], params['tau_g'], batch_size=params['batch_size_1'], num_negs=num_negs)
     else:
         loss_g = 0
-
+        
     if model_type in ['tricl']:
         masked_index1 = hyperedge_index_masking(hyperedge_index, num_nodes, num_edges, None, edge_mask1)
         masked_index2 = hyperedge_index_masking(hyperedge_index, num_nodes, num_edges, None, edge_mask2)
@@ -62,7 +64,6 @@ def train(model_type, num_negs):
         loss_m = (loss_m1 + loss_m2) * 0.5
     else:
         loss_m = 0
-
     loss = loss_n + params['w_g'] * loss_g + params['w_m'] * loss_m
     loss.backward()
     optimizer.step()
@@ -97,8 +98,10 @@ def node_classification_eval(num_splits=20):
 
 if __name__ == '__main__':
     wandb.init(project="sim_hgcl", mode="online")
+    start = time.time()
+    math.factorial(100000)
     parser = argparse.ArgumentParser('TriCL unsupervised learning.')
-    parser.add_argument('--dataset', type=str, default='cora', 
+    parser.add_argument('--dataset', type=str, default='NTU2012', 
         choices=['cora', 'citeseer', 'pubmed', 'cora_coauthor', 'dblp_coauthor', 
                  'zoo', '20newsW100', 'Mushroom', 'NTU2012', 'ModelNet40'])
     parser.add_argument('--model_type', type=str, default='tricl', choices=['tricl_n', 'tricl_ng', 'tricl'])
@@ -132,11 +135,16 @@ if __name__ == '__main__':
     accs_mean = list(np.mean(accs, axis=0))
     accs_std = list(np.std(accs, axis=0))
     print(f'[Final] dataset: {args.dataset}, test_acc: {accs_mean[2]:.2f}+-{accs_std[2]:.2f}')
+    end = time.time()
+    print(f"{(end - start)/5:.2f} sec")
     wandb.log({
+        "dataset": args.dataset,
         "Train_Acc_Mean": accs_mean[0],
         "Train_Acc_Std": accs_std[0],
         "Valid_Acc_Mean": accs_mean[1],
         "Valid_Acc_Std": accs_std[1],
         "Test_Acc_Mean": accs_mean[2],
-        "Test_Acc_Std": accs_std[2]
+        "Test_Acc_Std": accs_std[2],
+        "Time": end - start,
+        "model": 'TriCL'
     })
