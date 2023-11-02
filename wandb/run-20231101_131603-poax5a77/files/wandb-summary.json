@@ -1,0 +1,1 @@
+{"Epoch": 150, "Loss": 32.88774871826172, "_timestamp": 1698844714.5403833, "_runtime": 151.47429537773132, "_step": 750, "Train_Acc_Mean": 93.86206787109376, "Train_Acc_Std": 1.9784801083462962, "Valid_Acc_Mean": 70.4482761001587, "Valid_Acc_Std": 4.964919238393168, "Test_Acc_Mean": 70.79280792236328, "Test_Acc_Std": 1.4669181358341512, "_wandb": {"runtime": 150}}

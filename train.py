@@ -1,14 +1,14 @@
 import argparse
 import random
-
+import wandb
 import yaml
 from tqdm import tqdm
 import numpy as np
 import torch
 
 from TriCL.loader import DatasetLoader
-from TriCL.models import HGNN, TriCL
-from TriCL.utils import drop_features, drop_incidence, valid_node_edge_mask, hyperedge_index_masking, overlapping_score_dgl
+from TriCL.models import HyperEncoder, TriCL
+from TriCL.utils import drop_features, drop_incidence, valid_node_edge_mask, hyperedge_index_masking
 from TriCL.evaluation import linear_evaluation
 
 
@@ -74,11 +74,6 @@ def node_classification_eval(num_splits=20):
     model.eval()
     n, _ = model(data.features, data.hyperedge_index)
 
-    k = max(data.labels.tolist())
-    score = overlapping_score_dgl(data.features.detach().to('cpu'), n.detach().to('cpu'), k)
-
-    print(score)
-    
     if data.name == 'pubmed':
         lr = 0.005
         max_epoch = 300
@@ -101,6 +96,7 @@ def node_classification_eval(num_splits=20):
 
 
 if __name__ == '__main__':
+    wandb.init(project="sim_hgcl", mode="online")
     parser = argparse.ArgumentParser('TriCL unsupervised learning.')
     parser.add_argument('--dataset', type=str, default='cora', 
         choices=['cora', 'citeseer', 'pubmed', 'cora_coauthor', 'dblp_coauthor', 
@@ -118,13 +114,13 @@ if __name__ == '__main__':
     accs = []
     for seed in range(args.num_seeds):
         fix_seed(seed)
-        # encoder = HyperEncoder(data.features.shape[1], params['hid_dim'], params['hid_dim'], params['num_layers'])
-        encoder = HGNN(data.H, data.features.shape[1], params['hid_dim']).to(args.device)
+        encoder = HyperEncoder(data.features.shape[1], params['hid_dim'], params['hid_dim'], params['num_layers'])
         model = TriCL(encoder, params['proj_dim']).to(args.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
-
+        wandb.watch(model, log='all')
         for epoch in tqdm(range(1, params['epochs'] + 1)):
             loss = train(args.model_type, num_negs=None)
+            wandb.log({"Epoch": epoch, "Loss": loss})
         acc = node_classification_eval()
 
         accs.append(acc)
@@ -136,3 +132,11 @@ if __name__ == '__main__':
     accs_mean = list(np.mean(accs, axis=0))
     accs_std = list(np.std(accs, axis=0))
     print(f'[Final] dataset: {args.dataset}, test_acc: {accs_mean[2]:.2f}+-{accs_std[2]:.2f}')
+    wandb.log({
+        "Train_Acc_Mean": accs_mean[0],
+        "Train_Acc_Std": accs_std[0],
+        "Valid_Acc_Mean": accs_mean[1],
+        "Valid_Acc_Std": accs_std[1],
+        "Test_Acc_Mean": accs_mean[2],
+        "Test_Acc_Std": accs_std[2]
+    })

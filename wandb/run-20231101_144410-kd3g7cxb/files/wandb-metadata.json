@@ -1,0 +1,125 @@
+{
+    "os": "Linux-6.2.0-35-generic-x86_64-with-glibc2.31",
+    "python": "3.10.11",
+    "heartbeatAt": "2023-11-01T14:44:11.422995",
+    "startedAt": "2023-11-01T14:44:10.432331",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--dataset",
+        "zoo"
+    ],
+    "state": "running",
+    "program": "/workspace/tricl/train.py",
+    "codePathLocal": "train.py",
+    "codePath": "train.py",
+    "host": "49589b036e52",
+    "username": "root",
+    "executable": "/opt/conda/bin/python",
+    "cpu_count": 8,
+    "cpu_count_logical": 16,
+    "cpu_freq": {
+        "current": 3.100812499999999,
+        "min": 800.0,
+        "max": 4800.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 4.69,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.9,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.621,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.644,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.676,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.688,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.613,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.626,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.649,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 4.606,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        },
+        {
+            "current": 0.8,
+            "min": 800.0,
+            "max": 4800.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 915.3232879638672,
+            "used": 256.207332611084
+        }
+    },
+    "gpu": "NVIDIA GeForce GTX 1080 Ti",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce GTX 1080 Ti",
+            "memory_total": 11811160064
+        }
+    ],
+    "memory": {
+        "total": 31.174800872802734
+    }
+}

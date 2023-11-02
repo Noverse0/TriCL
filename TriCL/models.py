@@ -7,67 +7,40 @@ import torch.nn.functional as F
 from torch import Tensor
 # from torch_scatter import scatter_add
 
-from TriCL.layers import ProposedConv, HGNN_conv
+from TriCL.layers import ProposedConv
 
 
-# class HyperEncoder(nn.Module):
-#     def __init__(self, in_dim, edge_dim, node_dim, num_layers=2, act: Callable = nn.PReLU()):
-#         super(HyperEncoder, self).__init__()
-#         self.in_dim = in_dim
-#         self.edge_dim = edge_dim
-#         self.node_dim = node_dim
-#         self.num_layers = num_layers
-#         self.act = act
-
-#         self.convs = nn.ModuleList()
-#         if num_layers == 1:
-#             self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-#         else:
-#             self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-#             for _ in range(self.num_layers - 2):
-#                 self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-#             self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
-#         self.reset_parameters()
-
-#     def reset_parameters(self):
-#         for conv in self.convs:
-#             conv.reset_parameters()
-
-#     def forward(self, x: Tensor, hyperedge_index: Tensor, num_nodes: int, num_edges: int):
-#         for i in range(self.num_layers):
-#             x, e = self.convs[i](x, hyperedge_index, num_nodes, num_edges)
-#             x = self.act(x)
-#         return x, e # act, act
-
-class HGNN(nn.Module):
-    def __init__(self, in_dim, node_dim, num_layers=2):
-        super(HGNN, self).__init__()
+class HyperEncoder(nn.Module):
+    def __init__(self, in_dim, edge_dim, node_dim, num_layers=2, act: Callable = nn.PReLU()):
+        super(HyperEncoder, self).__init__()
         self.in_dim = in_dim
+        self.edge_dim = edge_dim
         self.node_dim = node_dim
-        self.edge_dim = node_dim
         self.num_layers = num_layers
-        
+        self.act = act
+
         self.convs = nn.ModuleList()
         if num_layers == 1:
-            self.convs.append(HGNN_conv(in_dim, node_dim))
+            self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
         else:
-            self.convs.append(HGNN_conv(in_dim, node_dim))
+            self.convs.append(ProposedConv(self.in_dim, self.edge_dim, self.node_dim, cached=False, act=act))
             for _ in range(self.num_layers - 2):
-                self.convs.append(HGNN_conv(node_dim, node_dim))
-            self.convs.append(HGNN_conv(node_dim, node_dim))
-        
+                self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+            self.convs.append(ProposedConv(self.node_dim, self.edge_dim, self.node_dim, cached=False, act=act))
+        self.reset_parameters()
+
     def reset_parameters(self):
         for conv in self.convs:
             conv.reset_parameters()
-    
-    def forward(self, x, Q, P, dropout_rate: float):
-        for i in range(self.num_layers):
-            n, e = self.convs[i](x, Q, P, dropout_rate)
-        return n, e
 
+    def forward(self, x: Tensor, hyperedge_index: Tensor, num_nodes: int, num_edges: int):
+        for i in range(self.num_layers):
+            x, e = self.convs[i](x, hyperedge_index, num_nodes, num_edges)
+            x = self.act(x)
+        return x, e # act, act
 
 class TriCL(nn.Module):
-    def __init__(self, encoder: HGNN, proj_dim: int):
+    def __init__(self, encoder: HyperEncoder, proj_dim: int):
         super(TriCL, self).__init__()
         self.encoder = encoder
 
@@ -92,82 +65,34 @@ class TriCL(nn.Module):
         
     def forward(self, x: Tensor, hyperedge_index: Tensor,
                 num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
-        if self_loop:
-            if num_nodes is None:
-                num_nodes = int(hyperedge_index[0].max()) + 1
-            if num_edges is None:
-                num_edges = int(hyperedge_index[1].max()) + 1
-            node_idx = torch.arange(0, num_nodes, device=self.device)
-            edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=self.device)
-            self_loop = torch.stack([node_idx, edge_idx])
-            self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
-                    
-            self.H = dglsp.spmatrix(
-                self_loop_hyperedge_index
-            ).to_dense()
-            
-            Q, P = self._generate_G_from_H(self.H)
-            n1, e1 = self.encoder(x, Q, P)
-        else:
-            self.H = dglsp.spmatrix(
-                hyperedge_index
-            ).to_dense()
-            
-            Q, P = self._generate_G_from_H(self.H)
-            n1, e1 = self.encoder(x, Q, P)
-            
-        return n1, e1[:num_edges]
-        
-    def _generate_G_from_H(self, H):
-        n_edge = H.shape[1]
-        
-        # the weight of the hyperedge
-        W = torch.ones(n_edge, dtype=torch.float32).to(self.device)
-        # the degree of the node
-        DV = torch.sum(H * W, dim=1)
-        # the degree of the hyperedge
-        DE = torch.sum(H, dim=0)
+        if num_nodes is None:
+            num_nodes = int(hyperedge_index[0].max()) + 1
+        if num_edges is None:
+            num_edges = int(hyperedge_index[1].max()) + 1
 
-        invDE = torch.diag(1.0 / DE)
-        DV2 = torch.diag(1.0 / torch.sqrt(DV))
-        W = torch.diag(W)
-        HT = torch.t(H)
+        node_idx = torch.arange(0, num_nodes, device=x.device)
+        edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=x.device)
+        self_loop = torch.stack([node_idx, edge_idx])
+        self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
+        n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + num_nodes)
+        return n, e[:num_edges]
 
-        Q = invDE @ HT @ DV2
-        P = DV2 @ H @ W
-        
-        return Q, P
-        
-    # def forward(self, x: Tensor, hyperedge_index: Tensor,
+    # def without_selfloop(self, x: Tensor, hyperedge_index: Tensor, node_mask: Optional[Tensor] = None,
     #             num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
     #     if num_nodes is None:
     #         num_nodes = int(hyperedge_index[0].max()) + 1
     #     if num_edges is None:
     #         num_edges = int(hyperedge_index[1].max()) + 1
 
-    #     node_idx = torch.arange(0, num_nodes, device=x.device)
-    #     edge_idx = torch.arange(num_edges, num_edges + num_nodes, device=x.device)
-    #     self_loop = torch.stack([node_idx, edge_idx])
-    #     self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
-    #     n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + num_nodes)
-    #     return n, e[:num_edges]
-
-    def without_selfloop(self, x: Tensor, hyperedge_index: Tensor, node_mask: Optional[Tensor] = None,
-                num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
-        if num_nodes is None:
-            num_nodes = int(hyperedge_index[0].max()) + 1
-        if num_edges is None:
-            num_edges = int(hyperedge_index[1].max()) + 1
-
-        if node_mask is not None:
-            node_idx = torch.where(~node_mask)[0]
-            edge_idx = torch.arange(num_edges, num_edges + len(node_idx), device=x.device)
-            self_loop = torch.stack([node_idx, edge_idx])
-            self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
-            n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + len(node_idx))
-            return n, e[:num_edges]
-        else:
-            return self.encoder(x, hyperedge_index, num_nodes, num_edges)
+    #     if node_mask is not None:
+    #         node_idx = torch.where(~node_mask)[0]
+    #         edge_idx = torch.arange(num_edges, num_edges + len(node_idx), device=x.device)
+    #         self_loop = torch.stack([node_idx, edge_idx])
+    #         self_loop_hyperedge_index = torch.cat([hyperedge_index, self_loop], 1)
+    #         n, e = self.encoder(x, self_loop_hyperedge_index, num_nodes, num_edges + len(node_idx))
+    #         return n, e[:num_edges]
+    #     else:
+    #         return self.encoder(x, hyperedge_index, num_nodes, num_edges)
 
     def f(self, x, tau):
         return torch.exp(x / tau)

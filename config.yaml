@@ -11,7 +11,7 @@ cora:
   tau_m: 1.0
   w_g: 4
   w_m: 1
-  epochs: 300
+  epochs: 150
   batch_size_1: null
   batch_size_2: null
 
@@ -28,7 +28,7 @@ citeseer:
   tau_m: 0.8
   w_g: 4
   w_m: 2
-  epochs: 500
+  epochs: 150
   batch_size_1: null
   batch_size_2: null
 
@@ -45,7 +45,7 @@ pubmed:
   tau_m: 0.6
   w_g: 4
   w_m: 2
-  epochs: 1000
+  epochs: 500
   batch_size_1: null
   batch_size_2: 4096
 
@@ -62,7 +62,7 @@ cora_coauthor:
   tau_m: 0.6
   w_g: 0.5
   w_m: 0.5
-  epochs: 800
+  epochs: 300
   batch_size_1: null
   batch_size_2: null
 
@@ -79,7 +79,7 @@ dblp_coauthor:
   tau_m: 1.0
   w_g: 0.0625
   w_m: 0.25
-  epochs: 500
+  epochs: 300
   batch_size_1: 4096
   batch_size_2: 1024
 
@@ -96,7 +96,7 @@ zoo:
   tau_m: 1.0
   w_g: 2.0
   w_m: 2.0
-  epochs: 100
+  epochs: 150
   batch_size_1: null
   batch_size_2: null
 
@@ -113,7 +113,7 @@ zoo:
   tau_m: 1.0
   w_g: 0.0625
   w_m: 0.0625
-  epochs: 500
+  epochs: 150
   batch_size_1: null
   batch_size_2: 8192
 
@@ -130,7 +130,7 @@ Mushroom:
   tau_m: 0.1
   w_g: 4
   w_m: 1
-  epochs: 500
+  epochs: 200
   batch_size_1: null
   batch_size_2: 8192
 
@@ -164,6 +164,6 @@ ModelNet40:
   tau_m: 0.9
   w_g: 0.25
   w_m: 0.125
-  epochs: 200
+  epochs: 150
   batch_size_1: null
   batch_size_2: 8192

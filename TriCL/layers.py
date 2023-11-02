@@ -17,7 +17,7 @@ class ProposedConv(MessagePassing):
     _cached_norm_n2e: Optional[Tensor]
     _cached_norm_e2n: Optional[Tensor]
 
-    def __init__(self, in_dim: int, hid_dim: int, out_dim: int, dropout: float = 0.0, 
+    def __init__(self, in_dim: int, hid_dim: int, out_dim: int, 
                  act: Callable = nn.PReLU(), bias: bool = True, cached: bool = False, 
                  row_norm: bool = True, **kwargs):
         kwargs.setdefault('aggr', 'add')
@@ -27,7 +27,7 @@ class ProposedConv(MessagePassing):
         self.in_dim = in_dim
         self.hid_dim = hid_dim
         self.out_dim = out_dim
-        self.dropout = dropout
+        # self.dropout = dropout
         self.act = act
         self.cached = cached
         self.row_norm = row_norm
@@ -53,7 +53,7 @@ class ProposedConv(MessagePassing):
         self._cached_norm_e2n = None
     
     def forward(self, x: Tensor, hyperedge_index: Tensor, 
-                num_nodes: Optional[int] = None, num_edges: Optional[int] = None):
+                num_nodes: Optional[int] = None, num_edges: Optional[int] = None, dropout_rate: Optional[float] = 0.0):
 
         if num_nodes is None:
             num_nodes = x.shape[0]
@@ -82,14 +82,14 @@ class ProposedConv(MessagePassing):
                 norm_e2n = Dn_inv[node_idx]
                 
             else:
+                De_inv = De.pow(-1.0)
+                De_inv[De_inv == float('inf')] = 0
                 Dn_inv_sqrt = Dn.pow(-0.5)
                 Dn_inv_sqrt[Dn_inv_sqrt == float('inf')] = 0
-                De_inv_sqrt = De.pow(-0.5)
-                De_inv_sqrt[De_inv_sqrt == float('inf')] = 0
+                
+                norm_n2e = De_inv[edge_idx] * Dn_inv_sqrt[node_idx]
+                norm_e2n = Dn_inv_sqrt[node_idx]
 
-                norm = De_inv_sqrt[edge_idx] * Dn_inv_sqrt[node_idx]
-                norm_n2e = norm
-                norm_e2n = norm
 
             if self.cached:
                 self._cached_norm_n2e = norm_n2e
@@ -98,6 +98,7 @@ class ProposedConv(MessagePassing):
             norm_n2e = cache_norm_n2e
             norm_e2n = cache_norm_e2n
 
+        
         x = self.lin_n2e(x)
         e = self.propagate(hyperedge_index, x=x, norm=norm_n2e, 
                                size=(num_nodes, num_edges))  # Node to edge
@@ -105,7 +106,7 @@ class ProposedConv(MessagePassing):
         if self.bias_n2e is not None:
             e = e + self.bias_n2e
         e = self.act(e)
-        e = F.dropout(e, p=self.dropout, training=self.training)
+        e = F.dropout(e, p=dropout_rate, training=self.training)
         
         x = self.lin_e2n(e)
         n = self.propagate(hyperedge_index.flip([0]), x=x, norm=norm_e2n, 
@@ -113,12 +114,12 @@ class ProposedConv(MessagePassing):
 
         if self.bias_e2n is not None:
             n = n + self.bias_e2n
-
+        n = self.act(n)
         return n, e # No act, act
 
     def message(self, x_j: Tensor, norm: Tensor):
         return norm.view(-1, 1) * x_j
-
+    
 class HGNN_conv(nn.Module):
     def __init__(self, in_ft, out_ft, bias=True):
         super(HGNN_conv, self).__init__()
@@ -147,15 +148,15 @@ class HGNN_conv(nn.Module):
     def forward(self, x: torch.Tensor, Q: torch.Tensor, P: torch.Tensor, dropout_rate: Optional[float] = 0.0):
         e = F.dropout(x, p=dropout_rate, training=self.training)
         e = e.matmul(self.weight1)
+        e = Q.matmul(e)
         if self.bias:
             e = e + self.bias1
-        e = Q.matmul(e)
         e = self.prelu_e(e)
         
         n = F.dropout(e, p=dropout_rate, training=self.training)
         n = n.matmul(self.weight2)
+        n = P.matmul(n)
         if self.bias:
             n = n + self.bias2
-        n = P.matmul(n)
         n = self.prelu_n(n)
         return n, e
