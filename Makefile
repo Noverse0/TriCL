@@ -16,7 +16,7 @@ build:
 
 run:
 	@echo "Booting up Docker Container"
-	@docker run -it --gpus '"device=0"' --ipc=host --name tricl -v `pwd`:/workspace/tricl tricl:latest /bin/bash
+	@docker run -it --gpus '"device=1"' --ipc=host --name tricl -v `pwd`:/workspace/tricl tricl:latest /bin/bash
 
 up: build run
 
