@@ -149,22 +149,22 @@ if __name__ == '__main__':
         gpu_max_memory_allocated.append(torch.cuda.max_memory_allocated(args.device))
         
         # evaluation
-        acc, nmi, f1 = node_classification_eval(model, data, params)
-        accs.append(acc)
-        nmis.append(nmi)
-        f1s.append(f1)
+    #     acc, nmi, f1 = node_classification_eval(model, data, params)
+    #     accs.append(acc)
+    #     nmis.append(nmi)
+    #     f1s.append(f1)
 
-        accs.append(acc)
-        acc_mean, acc_std = np.mean(acc, axis=0), np.std(acc, axis=0)
-        print(f'seed: {seed}, train_acc: {acc_mean[0]:.2f}+-{acc_std[0]:.2f}, '
-            f'valid_acc: {acc_mean[1]:.2f}+-{acc_std[1]:.2f}, test_acc: {acc_mean[2]:.2f}+-{acc_std[2]:.2f}')
-        print(f'Clustering NMI: {nmi:.2f}, F1: {f1:.2f}')
+    #     accs.append(acc)
+    #     acc_mean, acc_std = np.mean(acc, axis=0), np.std(acc, axis=0)
+    #     print(f'seed: {seed}, train_acc: {acc_mean[0]:.2f}+-{acc_std[0]:.2f}, '
+    #         f'valid_acc: {acc_mean[1]:.2f}+-{acc_std[1]:.2f}, test_acc: {acc_mean[2]:.2f}+-{acc_std[2]:.2f}')
+    #     print(f'Clustering NMI: {nmi:.2f}, F1: {f1:.2f}')
 
-    accs = np.array(accs).reshape(-1, 3)
-    accs_mean = list(np.mean(accs, axis=0))
-    accs_std = list(np.std(accs, axis=0))
-    print(f'[Final] dataset: {args.dataset}, test_acc: {accs_mean[2]:.2f}+-{accs_std[2]:.2f}')
-    print(f'Clustering NMI: {np.mean(nmis, axis=0):.2f}, F1: {np.mean(f1s, axis=0):.2f}')
+    # accs = np.array(accs).reshape(-1, 3)
+    # accs_mean = list(np.mean(accs, axis=0))
+    # accs_std = list(np.std(accs, axis=0))
+    # print(f'[Final] dataset: {args.dataset}, test_acc: {accs_mean[2]:.2f}+-{accs_std[2]:.2f}')
+    # print(f'Clustering NMI: {np.mean(nmis, axis=0):.2f}, F1: {np.mean(f1s, axis=0):.2f}')
     
     # Calculate and print the average GPU memory usage
     avg_gpu_memory_allocated = sum(gpu_memory_allocated) / len(gpu_memory_allocated)
@@ -177,17 +177,17 @@ if __name__ == '__main__':
     
     wandb.log({
         "dataset": args.dataset,
-        "Train_Acc_Mean": accs_mean[0],
-        "Train_Acc_Std": accs_std[0],
-        "Valid_Acc_Mean": accs_mean[1],
-        "Valid_Acc_Std": accs_std[1],
-        "Test_Acc_Mean": accs_mean[2],
-        "Test_Acc_Std": accs_std[2],
-        "NMI_Mean": np.mean(nmis, axis=0),
-        "F1_Mean": np.mean(f1s, axis=0),
+        # "Train_Acc_Mean": accs_mean[0],
+        # "Train_Acc_Std": accs_std[0],
+        # "Valid_Acc_Mean": accs_mean[1],
+        # "Valid_Acc_Std": accs_std[1],
+        # "Test_Acc_Mean": accs_mean[2],
+        # "Test_Acc_Std": accs_std[2],
+        # "NMI_Mean": np.mean(nmis, axis=0),
+        # "F1_Mean": np.mean(f1s, axis=0),
         "Time": (end - start)/5,
         "Average_GPU_Memory_Allocated_MB": avg_gpu_memory_allocated / (1024 ** 2),
         "Average_GPU_Peak_Memory_Allocated_MB": avg_gpu_max_memory_allocated / (1024 ** 2),
         "model": 'TriCL',
-        "gpu": "2080TI"
+        "gpu": "2030ti_time_test"
     })
